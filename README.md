@@ -1,6 +1,6 @@
-# Pigeon post
+# Pigeon Mail
 
-A private Telegram bot for you and your partner. Send it small letters and it delivers them to the other person at a random time, never more than 14 days later. What it does and why is in `SPEC.md`. The starter questions are in `prompts.md`.
+A little private Telegram bot for you and your partner. Send it small letters and it delivers them to the other person at a random time though never more than 14 days later. What it does and why is in `SPEC.md`. The starter questions are in `prompts.md`.
 
 It runs free on Google Apps Script and a Google Sheet, with no server.
 
