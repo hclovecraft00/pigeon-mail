@@ -1,18 +1,3 @@
-/**
- * Pigeon post
- *
- * A private Telegram bot for two people. Each of you sends it small letters (a poem,
- * a little thing that happened, a photo, a voice note, a song link), picks how fast
- * each one travels, and it delivers them to the other person at a random time
- * between 7am and midnight, never more than 14 days later. The receiver gets no
- * warning. They can ❤️ a letter, and the sender is told. Once a week you both get
- * the same question, and your answers are swapped once you've both replied.
- *
- * Lives inside a Google Sheet (Extensions → Apps Script). Setup is in README.md.
- * It checks Telegram for new messages once a minute, and every 10 minutes it
- * delivers letters that are due, sends prompts and brings pigeons home.
- */
-
 const TZ = 'Asia/Singapore';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOW_START_HOUR = 7; // letters, prompts and pings only arrive from 7am…
