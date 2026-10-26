@@ -1,0 +1,5 @@
+# clasp only syncs the script itself and its settings file (appsscript.json).
+# Everything else in this folder stays local.
+**/**
+!Code.gs
+!appsscript.json
