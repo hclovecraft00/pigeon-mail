@@ -42,6 +42,8 @@ const L = { id: 1, written: 2, from: 3, to: 4, kind: 5, text: 6, files: 7, speed
 const PROMPT_HEADERS = ['Prompt', 'Level', 'Added by', 'Last asked'];
 const P = { prompt: 1, level: 2, addedBy: 3, lastAsked: 4 };
 const ROUND_HEADERS = ['Round', 'Prompt', 'Sent', 'Answer 1', 'Answered 1', 'Answer 2', 'Answered 2', 'Delivered', 'Reminded 1', 'Reminded 2', 'Msg 1', 'Msg 2'];
+const TODO_HEADERS = ['ID', 'Added', 'Added by', 'Idea', 'Status', 'Done', 'Message ID'];
+const T = { id: 1, added: 2, addedBy: 3, idea: 4, status: 5, done: 6, messageId: 7 };
 const R = { round: 1, prompt: 2, sent: 3, answer1: 4, answered1: 5, answer2: 6, answered2: 7, delivered: 8, reminded1: 9, reminded2: 10, msg1: 11, msg2: 12 };
 
 const props = PropertiesService.getScriptProperties();
@@ -73,7 +75,10 @@ function help(user) {
     '',
     `💭 Once a week you both get the same question. Your answers stay sealed until you’ve both replied. Answering brings a pigeon home early.`,
     '',
+    '🤝 To save something to do together, start the message with <b>todo:</b>, e.g. <i>todo: try that new noodle place</i>. It goes on your shared list instead of the post. /todo shows the list; tick things off there and they’re kept in the shoebox.',
+    '',
     '/shoebox: letters you’ve received',
+    '/todo: things to do together',
     '/pigeon: how many pigeons are home',
     '/prompt: this week’s question',
     '/addprompt: add a question to the pile',
@@ -124,6 +129,7 @@ function setup() {
   tg('setMyCommands', {
     commands: [
       { command: 'shoebox', description: 'Letters you’ve received' },
+      { command: 'todo', description: 'Things to do together' },
       { command: 'pigeon', description: 'How many pigeons are home' },
       { command: 'prompt', description: 'This week’s question' },
       { command: 'addprompt', description: 'Add a question to the pile' },
@@ -270,6 +276,7 @@ function handleUpdate(u) {
 function handleMessage(msg, user) {
   const text = (msg.text || msg.caption || '').trim();
   if (msg.text && text.startsWith('/')) return handleCommand(text, user);
+  if (TODO_PREFIX.test(text)) return addTodo(msg, user, text.replace(TODO_PREFIX, ''));
 
   // An answer to the shared prompt: after tapping ✍️ Answer, or as a reply to the prompt
   const awaiting = props.getProperty('AWAITING_' + user);
@@ -292,6 +299,8 @@ function handleMessage(msg, user) {
 
 /** You edited a message in Telegram: if it's a letter that hasn't arrived yet, update its text. */
 function handleEdit(msg, user) {
+  const todo = todos().find(t => t.messageId === msg.message_id);
+  if (todo) return editTodo(todo, msg, user);
   const letter = letters().find(l => l.from === user && l.messageId === msg.message_id);
   if (!letter || letter.status === 'cancelled') return;
   if (letter.status === 'delivered') {
@@ -311,6 +320,9 @@ function handleCommand(text, user) {
 
   if (command === '/shoebox') {
     sendShoebox(user);
+  } else if (command === '/todo' || command === '/todos') {
+    if (args) addTodo({ message_id: '' }, user, args);
+    else sendTodos(user);
   } else if (command === '/pigeon') {
     send(user, pigeonStatus(user));
   } else if (command === '/prompt') {
@@ -504,6 +516,11 @@ function handleTap(cb, user) {
     answer('');
     return sendShoeboxMonth(user, id);
   }
+  if (action === 'donelist') {
+    answer('');
+    return sendDoneTogether(user);
+  }
+  if (['todo', 'tdone', 'tdel'].includes(action)) return handleTodoTap(cb, user, action, Number(id), answer);
 
   const letter = letters().find(l => l.id === Number(id));
   if (!letter) return answer('Couldn’t find that letter');
@@ -585,7 +602,11 @@ function received(user) {
 /** /shoebox: the most recent letters, then a button for each month. */
 function sendShoebox(user) {
   const all = received(user);
-  if (!all.length) return send(user, '🗃 Your shoebox is empty for now. Letters land here once they arrive.');
+  const done = todos().filter(t => t.status === 'done').length;
+  const doneButton = [{ text: `✅ Done together (${done})`, callback_data: 'donelist:' }];
+  if (!all.length) {
+    return send(user, '🗃 Your shoebox is empty for now. Letters land here once they arrive.', done ? { inline_keyboard: [doneButton] } : null);
+  }
   const months = [];
   all.forEach(l => {
     const key = Utilities.formatDate(l.delivered, TZ, 'yyyy-MM');
@@ -597,6 +618,7 @@ function sendShoebox(user) {
   if (months.length > 1 || all.length > SHOEBOX_RECENT) {
     months.forEach(m => buttons.push([{ text: `📁 ${m.label} (${m.count})`, callback_data: 'month:' + m.key }]));
   }
+  if (done) buttons.push(doneButton);
   send(user, `🗃 <b>Your shoebox</b> · ${all.length} ${all.length === 1 ? 'letter' : 'letters'}\nTap one to open it.`, { inline_keyboard: buttons });
 }
 
@@ -610,6 +632,89 @@ function sendShoeboxMonth(user, key) {
 function shoeboxButton(l) {
   const label = `${day(l.written)} · ${l.hearted ? '❤️ ' : ''}${snippet(l, 40)}`;
   return { text: label, callback_data: 'open:' + l.id };
+}
+
+// ---------- Things to do ----------
+// A shared list of things to do together. Adding is silent: the other person sees it in /todo.
+// Done ones are kept, with the date, under "Done together" in the shoebox.
+
+// "todo:", "todos:", "to do:" or "to-do:" at the start of a message (any capitals)
+const TODO_PREFIX = /^\s*to[\s-]?dos?\s*:\s*/i;
+const TODO_REACTION = '🤝'; // Telegram only allows some emoji as reactions, and 📝 isn't one
+const TODO_SHOWN = 90;
+
+function addTodo(msg, user, idea) {
+  idea = idea.trim();
+  if (fileOf(msg)) return send(user, 'Things to do can only be text (links are fine). Try sending it again without the attachment?');
+  if (!idea) return send(user, 'Add the idea after <b>todo:</b>, e.g. <i>todo: watch the sunrise at the beach</i>.');
+  const id = Number(props.getProperty('NEXT_TODO_ID') || 1);
+  props.setProperty('NEXT_TODO_ID', String(id + 1));
+  todosSheet().appendRow([id, new Date(), user, safe(idea), 'open', '', msg.message_id]);
+  if (msg.message_id) react(user, msg.message_id, TODO_REACTION);
+  else send(user, `🤝 Added to things to do: ${escapeHtml(todoSnippet(idea, 60))}`);
+}
+
+/** You edited a todo: message in Telegram, so update the idea. */
+function editTodo(todo, msg, user) {
+  if (todo.status !== 'open') return;
+  const idea = (msg.text || msg.caption || '').replace(TODO_PREFIX, '').trim();
+  if (!idea) return;
+  todosSheet().getRange(todo.row, T.idea).setValue(safe(idea));
+  tg('sendMessage', { chat_id: chatOf(user), text: '✏️ Updated on your list.', reply_parameters: { message_id: msg.message_id } });
+}
+
+/** /todo: every open idea as a button, newest first. */
+function sendTodos(user) {
+  const open = todos().filter(t => t.status === 'open').sort((a, b) => b.added - a.added);
+  if (!open.length) {
+    return send(user, '🤝 Nothing on your list yet. Start a message with <b>todo:</b> to add something to do together, e.g. <i>todo: try that new noodle place</i>.');
+  }
+  const buttons = open.slice(0, TODO_SHOWN).map(t => [{ text: todoSnippet(t.idea, 50), callback_data: 'todo:' + t.id }]);
+  send(user, `🤝 <b>Things to do</b> · ${open.length} ${open.length === 1 ? 'idea' : 'ideas'}\nTap one to tick it off or remove it.`, { inline_keyboard: buttons });
+}
+
+function handleTodoTap(cb, user, action, id, answer) {
+  const todo = todos().find(t => t.id === id);
+  if (!todo) return answer('Couldn’t find that one');
+  const edit = text => tg('editMessageText', { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text, parse_mode: 'HTML' });
+
+  if (action === 'todo') {
+    answer('');
+    if (todo.status !== 'open') return send(user, todo.status === 'done' ? `✅ Already done on ${day(todo.done)}.` : '🗑 That one’s been removed.');
+    const by = todo.addedBy === user ? 'you' : escapeHtml(nameOf(todo.addedBy));
+    return send(user, `🤝 ${escapeHtml(todo.idea)}\n<i>Added by ${by} on ${day(todo.added)}</i>`, {
+      inline_keyboard: [[{ text: '✅ Done', callback_data: 'tdone:' + id }, { text: '🗑 Remove', callback_data: 'tdel:' + id }]],
+    }, true);
+  }
+  if (todo.status !== 'open') {
+    answer('');
+    return edit(todo.status === 'done' ? `✅ Already done on ${day(todo.done)}.` : '🗑 That one’s already been removed.');
+  }
+  if (action === 'tdone') {
+    const now = new Date();
+    todosSheet().getRange(todo.row, T.status, 1, 2).setValues([['done', now]]);
+    answer('✅');
+    return edit(`✅ <b>Done together</b>, ${day(now)}: ${escapeHtml(todo.idea)}\n<i>Kept in /shoebox.</i>`);
+  }
+  if (action === 'tdel') {
+    todosSheet().getRange(todo.row, T.status).setValue('removed');
+    answer('');
+    return edit(`🗑 Removed from the list: ${escapeHtml(todoSnippet(todo.idea, 60))}`);
+  }
+  answer('');
+}
+
+/** The shoebox's "Done together" list, most recent first. */
+function sendDoneTogether(user) {
+  const done = todos().filter(t => t.status === 'done').sort((a, b) => b.done - a.done);
+  if (!done.length) return send(user, 'Nothing ticked off yet. Things you finish from /todo land here.');
+  const lines = done.map(t => `✅ <b>${day(t.done)}</b> · ${escapeHtml(t.idea)}`);
+  send(user, `✅ <b>Done together</b> · ${done.length}\n\n` + lines.join('\n'));
+}
+
+function todoSnippet(idea, length) {
+  const flat = String(idea).replace(/\s+/g, ' ').trim();
+  return flat.length > length ? flat.slice(0, length - 1) + '…' : flat;
 }
 
 // ---------- Shared prompts ----------
@@ -820,6 +925,30 @@ function sheetNamed(name) {
 const lettersSheet = () => sheetNamed('Letters');
 const roundsSheet = () => sheetNamed('Rounds');
 const promptsSheet = () => sheetNamed('Prompts');
+
+/** The Things to do tab, made the first time it's needed. */
+function todosSheet() {
+  const existing = sheetNamed('Things to do');
+  if (existing) return existing;
+  const sheet = SpreadsheetApp.openById(props.getProperty('SHEET_ID')).insertSheet('Things to do');
+  sheet.appendRow(TODO_HEADERS);
+  sheet.setFrozenRows(1);
+  sheet.setColumnWidth(T.idea, 400);
+  return sheet;
+}
+
+function todos() {
+  const sheet = todosSheet();
+  if (sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, TODO_HEADERS.length).getValues()
+    .map((r, i) => {
+      const t = { row: i + 2 };
+      Object.keys(T).forEach(k => { t[k] = r[T[k] - 1]; });
+      t.idea = String(t.idea);
+      return t;
+    })
+    .filter(t => t.id !== '');
+}
 
 function letters() {
   const sheet = lettersSheet();

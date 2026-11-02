@@ -19,6 +19,17 @@ It runs free on Google Apps Script and a Google Sheet, with no server.
 
 Paste the new `Code.gs` into the Apps Script editor (or run `clasp push`). Rerun `setup` only if a change says so.
 
+## Add-on: Things to do
+
+A shared bucket list that sits next to the letters: places to try, films to watch, little adventures. Letters are slow surprises, but an idea for this weekend shouldn’t take two weeks to arrive, so ideas skip the post and go on a list you can both see.
+
+- Start a message with `todo:` (e.g. `todo: watch the sunrise at the beach`) and it goes on the list instead of becoming a letter. The bot reacts 🤝. `to do:`, `to-do:` and `/todo <idea>` work too.
+- Adding is silent. Your partner sees the idea next time they open `/todo`, so no one gets pinged.
+- `/todo` lists everything still open. Tap an idea to mark it ✅ Done or 🗑 Remove it. Editing the original `todo:` message updates the idea.
+- Done ideas aren’t thrown away. They’re kept with the date under ✅ **Done together** in `/shoebox`, so over time you build up a record of things you’ve done together.
+
+**Already running the bot?** Paste in the new `Code.gs`, then rerun `setup` once so `/todo` shows up in the command menu. The Things to do tab in the Sheet is created the first time someone adds an idea.
+
 ## How it works
 
 - **Letters:** anything you send (text, photo, album, voice note, video, song, file, sticker) is posted straight away by ✍ Post (1–14 days). The bot reacts to your message with the speed. Start with `pigeon:` (1–3 days) or `sea:` (7–14 days) for those instead, or within an hour reply to your letter with `pigeon`, `sea`, `post` or `unsend`. To fix a typo, edit the message in Telegram as usual: the bot picks up the new text, as long as the letter hasn’t arrived yet.
@@ -26,12 +37,14 @@ Paste the new `Code.gs` into the Apps Script editor (or run `clasp push`). Rerun
 - **Pigeon loft:** 3 each. A pigeon comes home 2 days after it flies. Answering a shared prompt brings one home early. If all 3 are out, `pigeon:` letters go by post instead, and the bot says so.
 - **Shared prompt:** about once a week (5–9 days apart), at a random time in the window. Tap ✍️ Answer, or reply to the question. Answers are swapped once you’ve both answered. Only one question is open at a time. After a week, whoever hasn’t answered gets a weekly reminder. If the next question is overdue by the time you’ve both answered, it comes straight away.
 - **Nudge:** if nobody has posted a letter for 7 days, you both get a light writing prompt.
-- **Commands:** `/shoebox`, `/pigeon`, `/prompt`, `/addprompt <question>`, `/cancel`, `/invite` (owner only), `/help`.
+- **Things to do:** `todo:` adds an idea to a shared list (see the add-on above).
+- **Commands:** `/shoebox`, `/todo`, `/pigeon`, `/prompt`, `/addprompt <question>`, `/cancel`, `/invite` (owner only), `/help`.
 
 ## The Sheet
 
 - **Letters** (hidden, so nobody spoils a surprise): every letter, its speed, when it’s due and when it arrived. `From`/`To` are `one` (whoever set it up) and `two` (whoever joined by invite). Attachments are stored as Telegram file IDs, not copies.
 - **Prompts:** the question pile. Edit or add rows here. `Level` is `1`, `2`, `3`, `yours` (asked first) or `nudge`. `Last asked` is filled in by the bot.
+- **Things to do:** the shared list. `Status` is `open`, `done` or `removed`. Made the first time someone adds an idea, and safe to edit.
 - **Rounds:** each weekly question and both answers. Answers sit here before they’re swapped, so don’t peek.
 
 ## Good to know

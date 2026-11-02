@@ -39,6 +39,13 @@ Both partners have the same features and functions.
 - **Delivery receipt:** the sender is told when their letter has been delivered, e.g. *"Your letter from 14 Oct has arrived."*
 - **The shoebox:** `/shoebox` lets you browse every letter you've received (not ones you've sent), most recent first, with the option to filter by month.
 
+### Things to do
+
+- **A shared list** of things to do together: places, food, films, little adventures. Start a message with `todo:` (or `to do:`) and it goes on the list instead of the post. The bot reacts 🤝. Text only, but links are fine. `/todo <idea>` works too.
+- **Silent:** adding an idea doesn't notify the other person. They see it next time they open `/todo`.
+- **`/todo`** lists the open ideas, newest first. Tap one for ✅ Done or 🗑 Remove. Editing the original `todo:` message in Telegram updates the idea.
+- **Done together:** ticked-off ideas are kept with the date, under a ✅ Done together button in `/shoebox`.
+
 ### Prompts
 
 - **Gentle nudge:** if neither of you has sent a letter in 7 days, you both get a small prompt, e.g. *"What did you notice on your commute today?"*
